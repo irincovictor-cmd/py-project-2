@@ -57,3 +57,10 @@ Seven sample products (meals, snacks and drinks) are available on a fresh instal
 Existing `cafeteria_data.json` files are preserved; starter products are created for new data stores. If you already have an empty saved menu, staff can click **Load Starter Menu (if empty)**. New orders use **Student ID**, not a name. Previously saved orders remain visible to cafeteria staff.
 
 The ZIP includes the `images/` folder, and the GitHub source version can reconstruct the default illustrations from `sample_images.py` on first launch. User-selected custom photos are not backed up by that module.
+## Photo menu and order recovery
+
+The menu now uses nine user-supplied food/drink photos: Chicken Adobo, Siomai Rice, Pancit Canton, Cheese Sandwich, Banana Turon, Lemon Iced Tea, Bottled Water, Cheeseburger and French Fries. Existing menu items are migrated once on startup; the sample Hotdog entry is removed, and saved orders/settings are retained. These demo photos are stored locally for offline use.
+
+To recover a forgotten pickup number, open **Check Order Status**, enter your Student ID, and click **Find My Orders**. The order list displays each matching order's number, time, status, total, and payment status. Select a row to view items. If you already know the order number, you can still check that specific order.
+
+**Prototype privacy note:** Student ID entry is a lookup, not identity verification. This offline classroom prototype should not be deployed with real private student data without authentication and access controls. One user-supplied iced-tea picture has a visible stock-photo watermark and should be replaced with a properly licensed unwatermarked image before public distribution.
