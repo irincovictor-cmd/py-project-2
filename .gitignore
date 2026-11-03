@@ -1,0 +1,7 @@
+cafeteria_data.json
+settings.json
+.cafeteria-*.tmp
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
