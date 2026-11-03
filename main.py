@@ -165,9 +165,9 @@ class CafeteriaApp:
         left.pack(side="left", fill="both", expand=True, padx=(0, 10))
         self.food_tree = ttk.Treeview(left, columns=("name", "details", "price", "stock"), show="tree headings", selectmode="browse", height=8, style="Food.Treeview")
         self.food_tree.heading("#0", text="Photo")
-        self.food_tree.column("#0", width=100, stretch=False)
-        for key, label, size in (("name", "Food", 180), ("details", "Description", 210),
-                                 ("price", "Price", 85), ("stock", "Available", 80)):
+        self.food_tree.column("#0", width=130, minwidth=130, stretch=False)
+        for key, label, size in (("name", "Food", 185), ("details", "Description", 170),
+                                 ("price", "Price", 80), ("stock", "Available", 75)):
             self.food_tree.heading(key, text=label)
             self.food_tree.column(key, width=size, minwidth=60)
         row = ttk.Frame(left)
@@ -390,7 +390,7 @@ class CafeteriaApp:
         ttk.Button(buttons, text="Refresh", command=self.refresh_staff).pack(side="right")
         self.staff_menu = ttk.Treeview(menu, columns=("name", "details", "price", "stock", "active"), show="tree headings", style="Food.Treeview")
         self.staff_menu.heading("#0", text="Photo")
-        self.staff_menu.column("#0", width=100, stretch=False)
+        self.staff_menu.column("#0", width=130, minwidth=130, stretch=False)
         for key, label, width in (("name", "Food Name", 190), ("details", "Description", 270),
                                   ("price", "Price", 105), ("stock", "Stock", 90), ("active", "Enabled", 90)):
             self.staff_menu.heading(key, text=label)
@@ -444,7 +444,7 @@ class CafeteriaApp:
         for row in self.staff_menu.get_children():
             self.staff_menu.delete(row)
         for food in self.engine.menu:
-            self.staff_menu.insert("", "end", iid=food["id"], image=self.food_picture(food) or "", text=food["id"],
+            self.staff_menu.insert("", "end", iid=food["id"], image=self.food_picture(food) or "",
                                    values=(food["name"], food["description"], money(food["price_cents"]),
                                            food["stock"], "Yes" if food["available"] else "No"))
 
