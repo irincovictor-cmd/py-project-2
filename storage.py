@@ -14,16 +14,18 @@ class StorageError(ValueError):
 
 
 SAMPLE_MENU = [
-    {"id": "F001", "name": "Chicken Adobo Rice", "description": "Savory chicken with steamed rice", "price_cents": 6500, "stock": 20, "available": True, "category": "Meals", "image": "images/adobo.png"},
-    {"id": "F002", "name": "Siomai Rice", "description": "Four siomai pieces served with rice", "price_cents": 5000, "stock": 20, "available": True, "category": "Meals", "image": "images/siomai.png"},
-    {"id": "F003", "name": "Pancit Canton", "description": "Stir-fried noodles with vegetables", "price_cents": 3500, "stock": 15, "available": True, "category": "Meals", "image": "images/pancit.png"},
-    {"id": "F004", "name": "Cheese Sandwich", "description": "Toasted sandwich with melted cheese", "price_cents": 3000, "stock": 16, "available": True, "category": "Snacks", "image": "images/sandwich.png"},
-    {"id": "F005", "name": "Banana Turon", "description": "Crispy caramelized banana roll", "price_cents": 2000, "stock": 18, "available": True, "category": "Snacks", "image": "images/turon.png"},
-    {"id": "F006", "name": "Iced Tea", "description": "Chilled refreshing iced tea", "price_cents": 2500, "stock": 25, "available": True, "category": "Drinks", "image": "images/iced_tea.png"},
-    {"id": "F007", "name": "Bottled Water", "description": "Cold purified drinking water", "price_cents": 1500, "stock": 30, "available": True, "category": "Drinks", "image": "images/water.png"},
+    {"id": "F001", "name": "Chicken Adobo", "description": "Tender chicken braised in soy sauce, vinegar, garlic and bay leaves", "price_cents": 6500, "stock": 20, "available": True, "category": "Meals", "image": "images/adobo.png"},
+    {"id": "F002", "name": "Siomai Rice", "description": "Steamed siomai dumplings with seasoned yellow rice", "price_cents": 5000, "stock": 20, "available": True, "category": "Meals", "image": "images/siomai.png"},
+    {"id": "F003", "name": "Pancit Canton", "description": "Stir-fried noodles with vegetables and calamansi", "price_cents": 3500, "stock": 15, "available": True, "category": "Meals", "image": "images/pancit.png"},
+    {"id": "F004", "name": "Cheese Sandwich", "description": "Toasted bread with melted cheese filling", "price_cents": 3000, "stock": 16, "available": True, "category": "Snacks", "image": "images/sandwich.png"},
+    {"id": "F005", "name": "Banana Turon", "description": "Crispy caramelized banana rolls wrapped in pastry", "price_cents": 2000, "stock": 18, "available": True, "category": "Snacks", "image": "images/turon.png"},
+    {"id": "F006", "name": "Lemon Iced Tea", "description": "Chilled iced tea with lemon slices and ice", "price_cents": 2500, "stock": 25, "available": True, "category": "Drinks", "image": "images/iced_tea.png"},
+    {"id": "F007", "name": "Bottled Water", "description": "Refreshing purified water in a sealed plastic bottle", "price_cents": 1500, "stock": 30, "available": True, "category": "Drinks", "image": "images/water.png"},
+    {"id": "F008", "name": "Cheeseburger", "description": "Sesame bun with beef patty, cheese, lettuce, tomato, onion and bacon", "price_cents": 7500, "stock": 18, "available": True, "category": "Meals", "image": "images/burger.png"},
+    {"id": "F009", "name": "French Fries", "description": "Golden crispy potato fries served in a takeaway carton", "price_cents": 3500, "stock": 25, "available": True, "category": "Snacks", "image": "images/fries.png"},
 ]
 
-DEFAULT_DATA = {"menu": SAMPLE_MENU, "orders": [], "next_food": 7, "next_order": 0}
+DEFAULT_DATA = {"menu": SAMPLE_MENU, "orders": [], "next_food": 9, "next_order": 0}
 
 
 def atomic_json(path: Path, payload: dict) -> None:
