@@ -374,7 +374,7 @@ class CafeteriaApp:
         ttk.Button(actions, text="Add New Food", command=self.add_food).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text="Save Selected Changes", command=self.edit_food).pack(side="left", padx=8)
         ttk.Button(actions, text="Clear Form", command=self.clear_food_form).pack(side="left", padx=8)
-        ttk.Button(actions, text="Load Starter Menu (if empty)", command=self.load_sample_menu).pack(side="right")
+        ttk.Button(actions, text="Add Missing Starter Foods", command=self.load_sample_menu).pack(side="right")
         self.refresh_staff()
 
     def refresh_staff(self):
@@ -486,12 +486,12 @@ class CafeteriaApp:
 
     def load_sample_menu(self):
         try:
-            self.engine.load_sample_menu()
+            added = self.engine.load_sample_menu()
         except (CafeteriaError, StorageError) as exc:
             self.error(exc)
             return
         self.refresh_staff()
-        messagebox.showinfo("Starter Menu", "Seven sample menu items have been added.", parent=self.root)
+        messagebox.showinfo("Starter Menu", f"{added} starter food(s) added. Existing products and orders were preserved.", parent=self.root)
 
     def add_food(self):
         try:
