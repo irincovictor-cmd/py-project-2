@@ -4,19 +4,59 @@ import unittest
 from pathlib import Path
 
 from ordering import Cafeteria, CafeteriaError, money, parse_price
-from storage import JsonRepository, StaffPin, StorageError
+from storage import JsonRepository, StaffPin, StorageError, DEFAULT_DATA, SAMPLE_MENU
 
 
 class CafeteriaTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.path = Path(self.directory.name) / "cafeteria_data.json"
+        JsonRepository(self.path).save({"menu": [], "orders": [], "next_food": 0, "next_order": 0})
         self.cafe = Cafeteria(JsonRepository(self.path))
         self.adobo = self.cafe.add_food("Chicken Adobo", "Chicken with rice", "65.50", "10")
         self.water = self.cafe.add_food("Water", "Bottled", "15", "5")
 
     def tearDown(self):
         self.directory.cleanup()
+
+    def test_fresh_install_has_sample_food_and_images(self):
+        fresh = Cafeteria(JsonRepository(Path(self.directory.name) / "fresh.json"))
+        self.assertEqual(len(fresh.menu), 7)
+        self.assertEqual({f["category"] for f in fresh.menu}, {"Meals", "Snacks", "Drinks"})
+        for food in fresh.menu:
+            self.assertTrue((Path(__file__).resolve().parents[1] / food["image"]).exists())
+
+    def test_student_id_validation_and_lookup(self):
+        oid = self.cafe.place_order("2026-0001", {self.adobo: 1})
+        self.assertEqual(self.cafe.get_order(oid, "2026-0001")["student_id"], "2026-0001")
+        with self.assertRaises(CafeteriaError):
+            self.cafe.get_order(oid, "2026-0002")
+        for identifier in ("", "abc", "Name Name", "X!Y!", "a" * 21):
+            with self.subTest(identifier=identifier), self.assertRaises(CafeteriaError):
+                self.cafe.place_order(identifier, {self.adobo: 1})
+
+    def test_add_and_edit_custom_image(self):
+        fid = self.cafe.add_food("Mango Juice", "Cold", "35", "5", "Drinks", "images/water.png")
+        self.assertEqual(self.cafe._get_food(fid)["image"], "images/water.png")
+        self.cafe.edit_food(fid, "Mango", "", "30", "5", True, "Drinks", "")
+        self.assertEqual(self.cafe._get_food(fid)["image"], "")
+
+    def test_legacy_order_data_still_loads(self):
+        old_order = {"order_id": "ORD-0001", "customer": "Previous Student", "items": [], "total_cents": 0,
+                     "status": "Collected", "payment_status": "Paid", "created_at": "2026-01-01"}
+        JsonRepository(self.path).save({"menu": [], "orders": [old_order], "next_food": 0, "next_order": 1})
+        loaded = Cafeteria(JsonRepository(self.path))
+        self.assertEqual(loaded.get_order("ORD-0001")["customer"], "Previous Student")
+
+    def test_load_sample_menu_into_existing_empty_file(self):
+        blank = Path(self.directory.name) / "old_blank.json"
+        repo = JsonRepository(blank)
+        repo.save({"menu": [], "orders": [], "next_food": 0, "next_order": 0})
+        cafe = Cafeteria(repo)
+        cafe.load_sample_menu()
+        self.assertEqual(len(cafe.menu), 7)
+        with self.assertRaises(CafeteriaError):
+            cafe.load_sample_menu()
 
     def test_food_added(self):
         self.assertEqual(len(self.cafe.menu_for_student()), 2)
@@ -40,24 +80,24 @@ class CafeteriaTests(unittest.TestCase):
 
     def test_insufficient_stock_atomic(self):
         with self.assertRaises(CafeteriaError):
-            self.cafe.place_order("Student", {self.adobo: 2, self.water: 99})
+            self.cafe.place_order("2026-0001", {self.adobo: 2, self.water: 99})
         self.assertEqual(self.cafe.menu[0]["stock"], 10)
         self.assertEqual(self.cafe.orders, [])
 
-    def test_empty_cart_and_name(self):
+    def test_empty_cart_and_student_id(self):
         with self.assertRaises(CafeteriaError):
-            self.cafe.place_order("Student", {})
+            self.cafe.place_order("2026-0001", {})
         with self.assertRaises(CafeteriaError):
             self.cafe.place_order(" ", {self.adobo: 1})
 
     def test_checkout_reserves_stock(self):
-        order_id = self.cafe.place_order("Student A", {self.adobo: 2})
+        order_id = self.cafe.place_order("2026-0001", {self.adobo: 2})
         self.assertEqual(order_id, "ORD-0001")
         self.assertEqual(self.cafe.menu[0]["stock"], 8)
         self.assertEqual(self.cafe.get_order(order_id)["status"], "Queued")
 
     def test_sequence_and_payment(self):
-        oid = self.cafe.place_order("Student", {self.adobo: 1})
+        oid = self.cafe.place_order("2026-0001", {self.adobo: 1})
         self.assertEqual(self.cafe.advance(oid), "Preparing")
         self.assertEqual(self.cafe.advance(oid), "Ready for Pickup")
         self.cafe.collect(oid)
@@ -65,12 +105,12 @@ class CafeteriaTests(unittest.TestCase):
         self.assertEqual(self.cafe.get_order(oid)["payment_status"], "Paid")
 
     def test_cannot_collect_early(self):
-        oid = self.cafe.place_order("Student", {self.adobo: 1})
+        oid = self.cafe.place_order("2026-0001", {self.adobo: 1})
         with self.assertRaises(CafeteriaError):
             self.cafe.collect(oid)
 
     def test_cancel_restores_reserved_stock(self):
-        oid = self.cafe.place_order("Student", {self.water: 3})
+        oid = self.cafe.place_order("2026-0001", {self.water: 3})
         self.cafe.cancel(oid)
         self.assertEqual(self.cafe._get_food(self.water)["stock"], 5)
         self.assertEqual(self.cafe.get_order(oid)["status"], "Cancelled")
@@ -78,20 +118,20 @@ class CafeteriaTests(unittest.TestCase):
             self.cafe.cancel(oid)
 
     def test_no_cancel_after_preparing(self):
-        oid = self.cafe.place_order("Student", {self.water: 1})
+        oid = self.cafe.place_order("2026-0001", {self.water: 1})
         self.cafe.advance(oid)
         with self.assertRaises(CafeteriaError):
             self.cafe.cancel(oid)
 
     def test_persistence(self):
-        self.cafe.place_order("Student", {self.adobo: 1})
+        self.cafe.place_order("2026-0001", {self.adobo: 1})
         other = Cafeteria(JsonRepository(self.path))
         self.assertEqual(len(other.orders), 1)
         self.assertEqual(other.menu[0]["stock"], 9)
-        self.assertEqual(other.place_order("Second", {self.water: 1}), "ORD-0002")
+        self.assertEqual(other.place_order("2026-0002", {self.water: 1}), "ORD-0002")
 
     def test_menu_edit_does_not_change_order_snapshot(self):
-        oid = self.cafe.place_order("Student", {self.adobo: 1})
+        oid = self.cafe.place_order("2026-0001", {self.adobo: 1})
         self.cafe.edit_food(self.adobo, "Adobo Updated", "Changed", "75", "3", True)
         order = self.cafe.get_order(oid)
         self.assertEqual(order["total_cents"], 6550)
@@ -126,19 +166,19 @@ class CafeteriaTests(unittest.TestCase):
 
     def test_id_sequencing(self):
         self.assertEqual(self.cafe.add_food("New Food", "", "10", "1"), "F003")
-        self.assertEqual(self.cafe.place_order("A", {self.adobo: 1}), "ORD-0001")
-        self.assertEqual(self.cafe.place_order("B", {self.adobo: 1}), "ORD-0002")
+        self.assertEqual(self.cafe.place_order("2026-0003", {self.adobo: 1}), "ORD-0001")
+        self.assertEqual(self.cafe.place_order("2026-0004", {self.adobo: 1}), "ORD-0002")
 
     def test_invalid_cart_type(self):
         with self.assertRaises(CafeteriaError):
-            self.cafe.place_order("Student", {self.adobo: 1.5})
+            self.cafe.place_order("2026-0001", {self.adobo: 1.5})
 
     def test_failed_file_write_keeps_in_memory_data(self):
         from unittest.mock import patch
         before = json.dumps(self.cafe.data, sort_keys=True)
         with patch("storage.os.replace", side_effect=OSError("blocked")):
             with self.assertRaises(StorageError):
-                self.cafe.place_order("Student", {self.adobo: 1})
+                self.cafe.place_order("2026-0001", {self.adobo: 1})
         self.assertEqual(json.dumps(self.cafe.data, sort_keys=True), before)
 
 
