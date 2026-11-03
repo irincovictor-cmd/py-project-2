@@ -20,6 +20,10 @@ class CafeteriaApp:
         root.geometry("1140x730")
         root.minsize(930, 610)
         self.engine = Cafeteria(JsonRepository(BASE / "cafeteria_data.json"))
+        try:
+            self.engine.load_sample_menu()
+        except CafeteriaError:
+            pass
         self.staff_pin = StaffPin(BASE / "settings.json")
         self.cart = {}
         self.workspace = "student"
@@ -342,7 +346,6 @@ class CafeteriaApp:
                                   ("price", "Price", 105), ("stock", "Stock", 90), ("active", "Enabled", 90)):
             self.staff_menu.heading(key, text=label)
             self.staff_menu.column(key, width=width)
-        self.staff_menu.pack(fill="both", expand=True)
         self.staff_menu.bind("<<TreeviewSelect>>", lambda _: self.load_food())
         form = ttk.LabelFrame(menu, text="Food Item Details", padding=10)
         form.pack(fill="x", pady=10)
@@ -375,6 +378,7 @@ class CafeteriaApp:
         ttk.Button(actions, text="Save Selected Changes", command=self.edit_food).pack(side="left", padx=8)
         ttk.Button(actions, text="Clear Form", command=self.clear_food_form).pack(side="left", padx=8)
         ttk.Button(actions, text="Add Missing Starter Foods", command=self.load_sample_menu).pack(side="right")
+        self.staff_menu.pack(fill="both", expand=True)
         self.refresh_staff()
 
     def refresh_staff(self):
