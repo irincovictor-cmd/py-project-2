@@ -21,7 +21,7 @@ class CafeteriaTests(unittest.TestCase):
 
     def test_fresh_install_has_sample_food_and_images(self):
         fresh = Cafeteria(JsonRepository(Path(self.directory.name) / "fresh.json"))
-        self.assertEqual(len(fresh.menu), 7)
+        self.assertEqual(len(fresh.menu), 9)
         self.assertEqual({f["category"] for f in fresh.menu}, {"Meals", "Snacks", "Drinks"})
         for food in fresh.menu:
             self.assertTrue((Path(__file__).resolve().parents[1] / food["image"]).exists())
@@ -34,6 +34,30 @@ class CafeteriaTests(unittest.TestCase):
         for identifier in ("", "abc", "Name Name", "X!Y!", "a" * 21):
             with self.subTest(identifier=identifier), self.assertRaises(CafeteriaError):
                 self.cafe.place_order(identifier, {self.adobo: 1})
+
+    def test_find_orders_by_student_id_without_order_number(self):
+        first = self.cafe.place_order("2026-0001", {self.adobo: 1})
+        other = self.cafe.place_order("2026-0002", {self.water: 1})
+        newest = self.cafe.place_order("2026-0001", {self.water: 1})
+        self.assertEqual([x["order_id"] for x in self.cafe.find_orders_by_student(" 2026-0001 ")], [newest, first])
+        self.assertEqual([x["order_id"] for x in self.cafe.find_orders_by_student("2026-0002")], [other])
+        self.assertEqual(self.cafe.find_orders_by_student("2026-9999"), [])
+        with self.assertRaises(CafeteriaError):
+            self.cafe.find_orders_by_student("??")
+        reloaded = Cafeteria(JsonRepository(self.path))
+        self.assertEqual(len(reloaded.find_orders_by_student("2026-0001")), 2)
+
+    def test_upgrade_photos_preserves_history_and_removes_hotdog(self):
+        from storage import SAMPLE_MENU
+        repo = JsonRepository(Path(self.directory.name) / "prior_install.json")
+        repo.save({"menu": [{"id": "F001", "name": "Hotdog", "description": "Fried", "price_cents": 1500, "stock": 47, "available": True, "category": "Snacks", "image": ""}], "orders": [], "next_food": 1, "next_order": 0})
+        cafe = Cafeteria(repo)
+        cafe.upgrade_photo_menu()
+        self.assertEqual(len(cafe.menu), 9)
+        self.assertEqual({f["name"] for f in cafe.menu}, {f["name"] for f in SAMPLE_MENU})
+        self.assertTrue(all(f["image"].startswith("images/") for f in cafe.menu))
+        cafe.upgrade_photo_menu()
+        self.assertEqual(len(cafe.menu), 9)
 
     def test_add_and_edit_custom_image(self):
         fid = self.cafe.add_food("Mango Juice", "Cold", "35", "5", "Drinks", "images/water.png")
@@ -54,7 +78,7 @@ class CafeteriaTests(unittest.TestCase):
         repo.save({"menu": [], "orders": [], "next_food": 0, "next_order": 0})
         cafe = Cafeteria(repo)
         cafe.load_sample_menu()
-        self.assertEqual(len(cafe.menu), 7)
+        self.assertEqual(len(cafe.menu), 9)
         with self.assertRaises(CafeteriaError):
             cafe.load_sample_menu()
 
