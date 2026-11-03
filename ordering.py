@@ -64,17 +64,24 @@ class Cafeteria:
                 return item
         raise CafeteriaError("This menu item no longer exists.")
 
-    def load_sample_menu(self) -> None:
-        if self.menu:
-            raise CafeteriaError("Sample menu can be loaded only when the menu is empty.")
+    def load_sample_menu(self) -> int:
         from storage import SAMPLE_MENU
         data = deepcopy(self.data)
+        existing = {item["name"].strip().casefold() for item in data["menu"]}
+        added = 0
         for sample in SAMPLE_MENU:
+            if sample["name"].strip().casefold() in existing:
+                continue
             data["next_food"] += 1
             food = deepcopy(sample)
             food["id"] = f"F{data['next_food']:03d}"
             data["menu"].append(food)
+            existing.add(food["name"].strip().casefold())
+            added += 1
+        if not added:
+            raise CafeteriaError("All starter foods are already in the menu.")
         self._commit(data)
+        return added
 
     def add_food(self, name: str, description: str, price: str, stock: str, category: str = "Meals", image: str = "") -> str:
         name, description = name.strip(), description.strip()
