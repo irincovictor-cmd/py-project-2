@@ -1,10 +1,13 @@
 """Single-computer Cafeteria Pre-Ordering and Pickup prototype."""
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
+import shutil
+import uuid
 
-from ordering import Cafeteria, CafeteriaError, money, positive_int
+from ordering import Cafeteria, CafeteriaError, money, positive_int, parse_price
 from storage import JsonRepository, StaffPin, StorageError
+from sample_images import ensure_sample_images
 
 BASE = Path(__file__).resolve().parent
 
@@ -13,13 +16,85 @@ class CafeteriaApp:
     def __init__(self, root):
         self.root = root
         root.title("Cafeteria Pre-Ordering and Pickup")
+        ensure_sample_images(BASE)
         root.geometry("1140x730")
         root.minsize(930, 610)
         self.engine = Cafeteria(JsonRepository(BASE / "cafeteria_data.json"))
         self.staff_pin = StaffPin(BASE / "settings.json")
         self.cart = {}
         self.workspace = "student"
+        self.photos = {}
+        self.pending_image = None
+        self.pending_image_action = "keep"
+        ttk.Style(root).configure("Food.Treeview", rowheight=75)
         self.build_student()
+
+    def food_picture(self, food):
+        name = food.get("image", "")
+        if not name:
+            return None
+        if name in self.photos:
+            return self.photos[name]
+        try:
+            path = (BASE / name).resolve()
+            if not path.is_relative_to((BASE / "images").resolve()) or not path.is_file():
+                return None
+            picture = tk.PhotoImage(file=str(path))
+            factor = max(1, (picture.width() + 89) // 90, (picture.height() + 65) // 66)
+            if factor > 1:
+                picture = picture.subsample(factor)
+            self.photos[name] = picture
+            return picture
+        except (tk.TclError, OSError, ValueError):
+            return None
+
+    def choose_image(self):
+        path = filedialog.askopenfilename(parent=self.root, title="Choose product photo",
+                                          filetypes=[("PNG and GIF images", "*.png *.gif")])
+        if path:
+            try:
+                preview = tk.PhotoImage(file=path)
+                if preview.width() > 3000 or preview.height() > 3000:
+                    raise ValueError("Image is too large (maximum 3000 × 3000 pixels).")
+                factor = max(1, (preview.width() + 89) // 90, (preview.height() + 65) // 66)
+                if factor > 1:
+                    preview = preview.subsample(factor)
+                self.pending_image = path
+                self.pending_image_action = "replace"
+                self.image_label.set(Path(path).name)
+                self.form_preview.configure(image=preview, text="")
+                self.form_preview.image = preview
+            except (tk.TclError, OSError, ValueError) as exc:
+                self.error(f"Cannot open this image: {exc}")
+
+    def remove_image(self):
+        self.pending_image = None
+        self.pending_image_action = "remove"
+        self.image_label.set("No image")
+        self.form_preview.configure(image="", text="No photo")
+        self.form_preview.image = None
+
+    def validate_food_form(self):
+        name = self.food_name.get().strip()
+        description = self.food_desc.get().strip()
+        if not name or len(name) > 60 or len(description) > 180:
+            raise CafeteriaError("Food name must be 1–60 characters and description at most 180.")
+        parse_price(self.food_price.get())
+        positive_int(self.food_stock.get(), "Stock", allow_zero=True)
+        if self.food_category.get() not in ("Meals", "Snacks", "Drinks"):
+            raise CafeteriaError("Choose a valid food category.")
+
+    def store_selected_image(self):
+        if self.pending_image_action == "remove":
+            return ""
+        if self.pending_image_action != "replace":
+            return None
+        source = Path(self.pending_image)
+        target_dir = BASE / "images"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / (uuid.uuid4().hex + source.suffix.lower())
+        shutil.copyfile(source, target)
+        return "images/" + target.name
 
     def clear(self):
         for item in self.root.winfo_children():
@@ -83,7 +158,9 @@ class CafeteriaApp:
 
         left = ttk.LabelFrame(ordering, text="Available Food", padding=10)
         left.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        self.food_tree = ttk.Treeview(left, columns=("name", "details", "price", "stock"), show="headings", selectmode="browse", height=12)
+        self.food_tree = ttk.Treeview(left, columns=("name", "details", "price", "stock"), show="tree headings", selectmode="browse", height=8, style="Food.Treeview")
+        self.food_tree.heading("#0", text="Photo")
+        self.food_tree.column("#0", width=100, stretch=False)
         for key, label, size in (("name", "Food", 180), ("details", "Description", 210),
                                  ("price", "Price", 85), ("stock", "Available", 80)):
             self.food_tree.heading(key, text=label)
@@ -113,7 +190,7 @@ class CafeteriaApp:
         self.total_var = tk.StringVar(value=money(0))
         ttk.Label(right, text="Total: ", font=("Segoe UI", 13)).pack(anchor="e")
         ttk.Label(right, textvariable=self.total_var, font=("Segoe UI", 18, "bold")).pack(anchor="e")
-        ttk.Label(right, text="Student name / nickname").pack(anchor="w", pady=(8, 3))
+        ttk.Label(right, text="Student ID (e.g. 2026-0001)").pack(anchor="w", pady=(8, 3))
         self.customer = ttk.Entry(right)
         self.customer.pack(fill="x", pady=(0, 9))
         ttk.Button(right, text="Place Order (Pay at Pickup)", command=self.checkout).pack(fill="x")
@@ -123,6 +200,9 @@ class CafeteriaApp:
         searchbar.pack(fill="x", pady=12)
         self.order_number = tk.StringVar()
         ttk.Entry(searchbar, textvariable=self.order_number, width=26).pack(side="left")
+        ttk.Label(searchbar, text="Student ID").pack(side="left", padx=(10, 4))
+        self.track_student_id = tk.StringVar()
+        ttk.Entry(searchbar, textvariable=self.track_student_id, width=18).pack(side="left")
         ttk.Button(searchbar, text="Check Status", command=self.check_status).pack(side="left", padx=8)
         self.tracking_output = tk.Text(tracking, height=10, state="disabled", wrap="word")
         self.tracking_output.pack(fill="both", expand=True)
@@ -132,7 +212,7 @@ class CafeteriaApp:
         for row in self.food_tree.get_children():
             self.food_tree.delete(row)
         for food in self.engine.menu_for_student():
-            self.food_tree.insert("", "end", iid=food["id"],
+            self.food_tree.insert("", "end", iid=food["id"], image=self.food_picture(food) or "",
                                   values=(food["name"], food["description"], money(food["price_cents"]), food["stock"]))
         self.refresh_cart()
 
@@ -197,23 +277,25 @@ class CafeteriaApp:
 
     def checkout(self):
         try:
-            order_id = self.engine.place_order(self.customer.get(), self.cart)
+            self.last_student_id = self.customer.get().strip().upper()
+            order_id = self.engine.place_order(self.last_student_id, self.cart)
         except (CafeteriaError, StorageError) as exc:
             self.error(exc)
             return
         self.cart.clear()
         self.customer.delete(0, "end")
         self.order_number.set(order_id)
+        self.track_student_id.set(self.last_student_id)
         self.refresh_student()
         messagebox.showinfo("Order Confirmed", f"Your pickup number is {order_id}.\nPay upon pickup at the cafeteria counter.", parent=self.root)
 
     def check_status(self):
         try:
-            order = self.engine.get_order(self.order_number.get())
+            order = self.engine.get_order(self.order_number.get(), self.track_student_id.get())
         except CafeteriaError as exc:
             self.error(exc)
             return
-        text = (f"Order: {order['order_id']}\nName: {order['customer']}\n"
+        text = (f"Order: {order['order_id']}\nStudent ID: {order.get('student_id', order.get('customer', 'Unknown'))}\n"
                 f"Status: {order['status']}\nPayment: {order['payment_status']}\n"
                 f"Total: {money(order['total_cents'])}\n\nItems:\n")
         for item in order["items"]:
@@ -235,11 +317,11 @@ class CafeteriaApp:
         menu = ttk.Frame(notebook, padding=10)
         notebook.add(queue, text="Kitchen Queue")
         notebook.add(menu, text="Food Menu Management")
-        self.queue_tree = ttk.Treeview(queue, columns=("customer", "status", "total", "time", "payment"),
+        self.queue_tree = ttk.Treeview(queue, columns=("student_id", "status", "total", "time", "payment"),
                                        show="tree headings", selectmode="browse")
         self.queue_tree.heading("#0", text="Order ID")
         self.queue_tree.column("#0", width=110, stretch=False)
-        for key, label, width in (("customer", "Customer", 170), ("status", "Status", 140),
+        for key, label, width in (("student_id", "Student ID", 170), ("status", "Status", 140),
                                   ("total", "Total", 100), ("time", "Placed At", 160), ("payment", "Payment", 100)):
             self.queue_tree.heading(key, text=label)
             self.queue_tree.column(key, width=width)
@@ -253,9 +335,9 @@ class CafeteriaApp:
         ttk.Button(buttons, text="Confirm Payment & Collection", command=self.collect_order).pack(side="left", padx=8)
         ttk.Button(buttons, text="Cancel Queued Order", command=self.cancel_order).pack(side="left", padx=8)
         ttk.Button(buttons, text="Refresh", command=self.refresh_staff).pack(side="right")
-        self.staff_menu = ttk.Treeview(menu, columns=("name", "details", "price", "stock", "active"), show="tree headings")
-        self.staff_menu.heading("#0", text="ID")
-        self.staff_menu.column("#0", width=80, stretch=False)
+        self.staff_menu = ttk.Treeview(menu, columns=("name", "details", "price", "stock", "active"), show="tree headings", style="Food.Treeview")
+        self.staff_menu.heading("#0", text="Photo")
+        self.staff_menu.column("#0", width=100, stretch=False)
         for key, label, width in (("name", "Food Name", 190), ("details", "Description", 270),
                                   ("price", "Price", 105), ("stock", "Stock", 90), ("active", "Enabled", 90)):
             self.staff_menu.heading(key, text=label)
@@ -275,11 +357,24 @@ class CafeteriaApp:
             ttk.Label(form, text=label).grid(row=0, column=col, sticky="w", padx=(0, 8))
             ttk.Entry(form, textvariable=variable, width=width).grid(row=1, column=col, sticky="ew", padx=(0, 8), pady=4)
         ttk.Checkbutton(form, text="Enabled", variable=self.food_enabled).grid(row=1, column=4, sticky="w")
+        pictures = ttk.Frame(menu)
+        pictures.pack(fill="x", pady=(0, 6))
+        self.food_category = tk.StringVar(value="Meals")
+        ttk.Label(pictures, text="Category").pack(side="left", padx=(0, 4))
+        ttk.Combobox(pictures, values=("Meals", "Snacks", "Drinks"), textvariable=self.food_category,
+                     state="readonly", width=12).pack(side="left", padx=(0, 15))
+        ttk.Button(pictures, text="Choose Image (PNG/GIF)", command=self.choose_image).pack(side="left")
+        ttk.Button(pictures, text="Remove Image", command=self.remove_image).pack(side="left", padx=8)
+        self.image_label = tk.StringVar(value="No image")
+        ttk.Label(pictures, textvariable=self.image_label).pack(side="left", padx=5)
+        self.form_preview = ttk.Label(pictures, text="No photo")
+        self.form_preview.pack(side="right")
         actions = ttk.Frame(menu)
         actions.pack(fill="x")
         ttk.Button(actions, text="Add New Food", command=self.add_food).pack(side="left", padx=(0, 8))
         ttk.Button(actions, text="Save Selected Changes", command=self.edit_food).pack(side="left", padx=8)
         ttk.Button(actions, text="Clear Form", command=self.clear_food_form).pack(side="left", padx=8)
+        ttk.Button(actions, text="Load Starter Menu (if empty)", command=self.load_sample_menu).pack(side="right")
         self.refresh_staff()
 
     def refresh_staff(self):
@@ -288,7 +383,7 @@ class CafeteriaApp:
             self.queue_tree.delete(row)
         for order in reversed(self.engine.orders):
             self.queue_tree.insert("", "end", iid=order["order_id"], text=order["order_id"],
-                                   values=(order["customer"], order["status"], money(order["total_cents"]),
+                                   values=(order.get("student_id", order.get("customer", "Legacy")), order["status"], money(order["total_cents"]),
                                            order["created_at"], order["payment_status"]))
         if current and self.queue_tree.exists(current[0]):
             self.queue_tree.selection_set(current[0])
@@ -296,7 +391,7 @@ class CafeteriaApp:
         for row in self.staff_menu.get_children():
             self.staff_menu.delete(row)
         for food in self.engine.menu:
-            self.staff_menu.insert("", "end", iid=food["id"], text=food["id"],
+            self.staff_menu.insert("", "end", iid=food["id"], image=self.food_picture(food) or "", text=food["id"],
                                    values=(food["name"], food["description"], money(food["price_cents"]),
                                            food["stock"], "Yes" if food["available"] else "No"))
 
@@ -312,7 +407,7 @@ class CafeteriaApp:
         content = "Select an order to view its items."
         if selected:
             order = self.engine.get_order(selected[0])
-            lines = [f"{order['order_id']} — {order['customer']} — {order['status']}"]
+            lines = [f"{order['order_id']} — {order.get('student_id', order.get('customer', 'Legacy'))} — {order['status']}"]
             lines += [f"{item['quantity']} × {item['name']} ({money(item['unit_price_cents'])} each)" for item in order["items"]]
             content = "\n".join(lines)
         self.order_details.configure(state="normal")
@@ -368,21 +463,47 @@ class CafeteriaApp:
         self.food_price.set(f"{food['price_cents'] / 100:.2f}")
         self.food_stock.set(str(food["stock"]))
         self.food_enabled.set(food["available"])
+        self.food_category.set(food.get("category", "Meals"))
+        self.pending_image = None
+        self.pending_image_action = "keep"
+        self.image_label.set(food.get("image", "No image") or "No image")
+        picture = self.food_picture(food)
+        self.form_preview.configure(image=picture or "", text="" if picture else "No photo")
+        self.form_preview.image = picture
 
     def clear_food_form(self):
         for variable in (self.food_name, self.food_desc, self.food_price):
             variable.set("")
         self.food_stock.set("0")
         self.food_enabled.set(True)
+        self.food_category.set("Meals")
+        self.pending_image = None
+        self.pending_image_action = "keep"
+        self.image_label.set("No image")
+        self.form_preview.configure(image="", text="No photo")
+        self.form_preview.image = None
         self.staff_menu.selection_remove(self.staff_menu.selection())
+
+    def load_sample_menu(self):
+        try:
+            self.engine.load_sample_menu()
+        except (CafeteriaError, StorageError) as exc:
+            self.error(exc)
+            return
+        self.refresh_staff()
+        messagebox.showinfo("Starter Menu", "Seven sample menu items have been added.", parent=self.root)
 
     def add_food(self):
         try:
+            self.validate_food_form()
+            picture = self.store_selected_image()
             food_id = self.engine.add_food(self.food_name.get(), self.food_desc.get(),
-                                           self.food_price.get(), self.food_stock.get())
+                                           self.food_price.get(), self.food_stock.get(),
+                                           self.food_category.get(), picture or "")
             if not self.food_enabled.get():
                 self.engine.edit_food(food_id, self.food_name.get(), self.food_desc.get(),
-                                      self.food_price.get(), self.food_stock.get(), False)
+                                      self.food_price.get(), self.food_stock.get(), False,
+                                      self.food_category.get(), picture or "")
         except (CafeteriaError, StorageError) as exc:
             self.error(exc)
             return
@@ -395,11 +516,16 @@ class CafeteriaApp:
             self.error("Select a food item to edit.")
             return
         try:
+            self.validate_food_form()
+            picture = self.store_selected_image()
             self.engine.edit_food(selected[0], self.food_name.get(), self.food_desc.get(),
-                                  self.food_price.get(), self.food_stock.get(), self.food_enabled.get())
+                                  self.food_price.get(), self.food_stock.get(), self.food_enabled.get(),
+                                  self.food_category.get(), picture)
         except (CafeteriaError, StorageError) as exc:
             self.error(exc)
             return
+        self.pending_image = None
+        self.pending_image_action = "keep"
         self.refresh_staff()
 
 
