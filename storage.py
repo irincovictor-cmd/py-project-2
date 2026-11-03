@@ -13,7 +13,17 @@ class StorageError(ValueError):
     pass
 
 
-DEFAULT_DATA = {"menu": [], "orders": [], "next_food": 0, "next_order": 0}
+SAMPLE_MENU = [
+    {"id": "F001", "name": "Chicken Adobo Rice", "description": "Savory chicken with steamed rice", "price_cents": 6500, "stock": 20, "available": True, "category": "Meals", "image": "images/adobo.png"},
+    {"id": "F002", "name": "Siomai Rice", "description": "Four siomai pieces served with rice", "price_cents": 5000, "stock": 20, "available": True, "category": "Meals", "image": "images/siomai.png"},
+    {"id": "F003", "name": "Pancit Canton", "description": "Stir-fried noodles with vegetables", "price_cents": 3500, "stock": 15, "available": True, "category": "Meals", "image": "images/pancit.png"},
+    {"id": "F004", "name": "Cheese Sandwich", "description": "Toasted sandwich with melted cheese", "price_cents": 3000, "stock": 16, "available": True, "category": "Snacks", "image": "images/sandwich.png"},
+    {"id": "F005", "name": "Banana Turon", "description": "Crispy caramelized banana roll", "price_cents": 2000, "stock": 18, "available": True, "category": "Snacks", "image": "images/turon.png"},
+    {"id": "F006", "name": "Iced Tea", "description": "Chilled refreshing iced tea", "price_cents": 2500, "stock": 25, "available": True, "category": "Drinks", "image": "images/iced_tea.png"},
+    {"id": "F007", "name": "Bottled Water", "description": "Cold purified drinking water", "price_cents": 1500, "stock": 30, "available": True, "category": "Drinks", "image": "images/water.png"},
+]
+
+DEFAULT_DATA = {"menu": SAMPLE_MENU, "orders": [], "next_food": 7, "next_order": 0}
 
 
 def atomic_json(path: Path, payload: dict) -> None:
@@ -53,9 +63,13 @@ class JsonRepository:
                     raise ValueError("Invalid menu item.")
                 if type(f["price_cents"]) is not int or f["price_cents"] <= 0 or type(f["stock"]) is not int or f["stock"] < 0:
                     raise ValueError("Invalid menu price or stock.")
+                if not isinstance(f.get("image", ""), str) or not isinstance(f.get("category", "Meals"), str):
+                    raise ValueError("Invalid image or category for menu item.")
             for o in data["orders"]:
-                if not isinstance(o, dict) or not all(k in o for k in ("order_id", "customer", "items", "total_cents", "status", "payment_status", "created_at")):
+                if not isinstance(o, dict) or not all(k in o for k in ("order_id", "items", "total_cents", "status", "payment_status", "created_at")):
                     raise ValueError("Invalid order entry.")
+                if not isinstance(o.get("student_id", o.get("customer")), str):
+                    raise ValueError("Order must include a student ID or a legacy customer field.")
             if len({f["id"] for f in data["menu"]}) != len(data["menu"]):
                 raise ValueError("Duplicate menu IDs.")
             if len({o["order_id"] for o in data["orders"]}) != len(data["orders"]):
