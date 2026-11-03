@@ -169,14 +169,15 @@ class CafeteriaApp:
                                  ("price", "Price", 85), ("stock", "Available", 80)):
             self.food_tree.heading(key, text=label)
             self.food_tree.column(key, width=size, minwidth=60)
-        self.food_tree.pack(fill="both", expand=True)
         row = ttk.Frame(left)
-        row.pack(fill="x", pady=(10, 0))
+        row.pack(side="bottom", fill="x", pady=(10, 0))
         ttk.Label(row, text="Quantity").pack(side="left")
         self.quantity = tk.StringVar(value="1")
         ttk.Spinbox(row, from_=1, to=10000, width=7, textvariable=self.quantity).pack(side="left", padx=7)
         ttk.Button(row, text="Add Selected to Cart", command=self.add_to_cart).pack(side="left", padx=5)
         ttk.Button(row, text="Refresh Menu", command=self.refresh_student).pack(side="left")
+        self.food_tree.pack(side="top", fill="both", expand=True)
+        self.food_tree.bind("<Double-1>", lambda event: self.add_to_cart() if self.food_tree.identify_row(event.y) else None)
 
         right = ttk.LabelFrame(ordering, text="Shopping Cart", padding=10)
         right.pack(side="right", fill="both", expand=True)
