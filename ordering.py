@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
+import re
 from typing import Any
 
 
@@ -63,7 +64,19 @@ class Cafeteria:
                 return item
         raise CafeteriaError("This menu item no longer exists.")
 
-    def add_food(self, name: str, description: str, price: str, stock: str) -> str:
+    def load_sample_menu(self) -> None:
+        if self.menu:
+            raise CafeteriaError("Sample menu can be loaded only when the menu is empty.")
+        from storage import SAMPLE_MENU
+        data = deepcopy(self.data)
+        for sample in SAMPLE_MENU:
+            data["next_food"] += 1
+            food = deepcopy(sample)
+            food["id"] = f"F{data['next_food']:03d}"
+            data["menu"].append(food)
+        self._commit(data)
+
+    def add_food(self, name: str, description: str, price: str, stock: str, category: str = "Meals", image: str = "") -> str:
         name, description = name.strip(), description.strip()
         if not name or len(name) > 60:
             raise CafeteriaError("Food name is required (maximum 60 characters).")
@@ -74,12 +87,15 @@ class Cafeteria:
         data = deepcopy(self.data)
         data["next_food"] += 1
         food_id = f"F{data['next_food']:03d}"
+        if category not in ("Meals", "Snacks", "Drinks"):
+            raise CafeteriaError("Select a valid category.")
         data["menu"].append({"id": food_id, "name": name, "description": description,
-                             "price_cents": cents, "stock": count, "available": True})
+                             "price_cents": cents, "stock": count, "available": True,
+                             "category": category, "image": image})
         self._commit(data)
         return food_id
 
-    def edit_food(self, food_id: str, name: str, description: str, price: str, stock: str, available: bool) -> None:
+    def edit_food(self, food_id: str, name: str, description: str, price: str, stock: str, available: bool, category: str | None = None, image: str | None = None) -> None:
         name, description = name.strip(), description.strip()
         if not name or len(name) > 60:
             raise CafeteriaError("Food name is required (maximum 60 characters).")
@@ -89,8 +105,14 @@ class Cafeteria:
         count = positive_int(stock, "Stock", allow_zero=True)
         data = deepcopy(self.data)
         food = self._get_food(food_id, data)
+        if category is not None and category not in ("Meals", "Snacks", "Drinks"):
+            raise CafeteriaError("Select a valid category.")
         food.update(name=name, description=description, price_cents=cents,
                     stock=count, available=bool(available))
+        if category is not None:
+            food["category"] = category
+        if image is not None:
+            food["image"] = image
         self._commit(data)
 
     def menu_for_student(self) -> list[dict]:
@@ -113,26 +135,28 @@ class Cafeteria:
             total += line["subtotal_cents"]
         return lines, total
 
-    def place_order(self, customer: str, cart: dict[str, int]) -> str:
-        customer = customer.strip()
-        if not customer or len(customer) > 60:
-            raise CafeteriaError("Enter a customer name (maximum 60 characters).")
+    def place_order(self, student_id: str, cart: dict[str, int]) -> str:
+        student_id = student_id.strip().upper()
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,19}", student_id):
+            raise CafeteriaError("Student ID must be 4–20 letters, numbers, or hyphens (no spaces).")
         lines, total = self.validate_cart(cart)
         data = deepcopy(self.data)
         for line in lines:
             self._get_food(line["food_id"], data)["stock"] -= line["quantity"]
         data["next_order"] += 1
         order_id = f"ORD-{data['next_order']:04d}"
-        data["orders"].append({"order_id": order_id, "customer": customer,
+        data["orders"].append({"order_id": order_id, "student_id": student_id,
                                "items": lines, "total_cents": total, "status": "Queued",
                                "payment_status": "Unpaid", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                "completed_at": ""})
         self._commit(data)
         return order_id
 
-    def get_order(self, order_id: str) -> dict:
+    def get_order(self, order_id: str, student_id: str | None = None) -> dict:
         for order in self.orders:
             if order["order_id"].casefold() == order_id.strip().casefold():
+                if student_id is not None and order.get("student_id", "").casefold() != student_id.strip().casefold():
+                    raise CafeteriaError("Order number and Student ID do not match.")
                 return deepcopy(order)
         raise CafeteriaError("Order number not found.")
 
