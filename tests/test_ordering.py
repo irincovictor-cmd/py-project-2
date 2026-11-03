@@ -58,6 +58,17 @@ class CafeteriaTests(unittest.TestCase):
         with self.assertRaises(CafeteriaError):
             cafe.load_sample_menu()
 
+    def test_add_starter_menu_without_removing_existing_food(self):
+        repo = JsonRepository(Path(self.directory.name) / "hotdog.json")
+        repo.save({"menu": [{"id": "F001", "name": "Hotdog", "description": "Fried", "price_cents": 1500, "stock": 47, "available": True, "category": "Snacks", "image": ""}], "orders": [], "next_food": 1, "next_order": 0})
+        cafe = Cafeteria(repo)
+        self.assertEqual(cafe.load_sample_menu(), 7)
+        self.assertEqual(len(cafe.menu), 8)
+        self.assertEqual(cafe.menu[0]["name"], "Hotdog")
+        self.assertEqual(len({food["id"] for food in cafe.menu}), 8)
+        with self.assertRaises(CafeteriaError):
+            cafe.load_sample_menu()
+
     def test_food_added(self):
         self.assertEqual(len(self.cafe.menu_for_student()), 2)
         self.assertEqual(self.cafe.menu[0]["price_cents"], 6550)
