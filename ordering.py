@@ -83,6 +83,33 @@ class Cafeteria:
         self._commit(data)
         return added
 
+    def upgrade_photo_menu(self) -> None:
+        if self.data.get("photo_menu_v2"):
+            return
+        from storage import SAMPLE_MENU
+        data = deepcopy(self.data)
+        matches = {item["name"].strip().casefold(): item for item in data["menu"]}
+        aliases = {
+            "Chicken Adobo": "chicken adobo rice",
+            "Lemon Iced Tea": "iced tea",
+        }
+        data["menu"] = [item for item in data["menu"] if item["name"].strip().casefold() != "hotdog"]
+        for sample in SAMPLE_MENU:
+            key = sample["name"].strip().casefold()
+            found = matches.get(key) or matches.get(aliases.get(sample["name"], ""))
+            if found and found in data["menu"]:
+                found["name"] = sample["name"]
+                found["description"] = sample["description"]
+                found["image"] = sample["image"]
+                found["category"] = sample["category"]
+            else:
+                data["next_food"] += 1
+                item = deepcopy(sample)
+                item["id"] = f"F{data['next_food']:03d}"
+                data["menu"].append(item)
+        data["photo_menu_v2"] = True
+        self._commit(data)
+
     def add_food(self, name: str, description: str, price: str, stock: str, category: str = "Meals", image: str = "") -> str:
         name, description = name.strip(), description.strip()
         if not name or len(name) > 60:
@@ -166,6 +193,14 @@ class Cafeteria:
                     raise CafeteriaError("Order number and Student ID do not match.")
                 return deepcopy(order)
         raise CafeteriaError("Order number not found.")
+
+    def find_orders_by_student(self, student_id: str) -> list[dict]:
+        identifier = student_id.strip().upper()
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,19}", identifier):
+            raise CafeteriaError("Enter a valid Student ID (4–20 letters, numbers or hyphens).")
+        matches = [deepcopy(order) for order in self.orders
+                   if order.get("student_id", "").strip().upper() == identifier]
+        return list(reversed(matches))
 
     def advance(self, order_id: str) -> str:
         transitions = {"Queued": "Preparing", "Preparing": "Ready for Pickup"}
