@@ -20,6 +20,7 @@ class CafeteriaApp:
         root.geometry("1140x730")
         root.minsize(930, 610)
         self.engine = Cafeteria(JsonRepository(BASE / "cafeteria_data.json"))
+        self.engine.upgrade_photo_menu()
         try:
             self.engine.load_sample_menu()
         except CafeteriaError:
@@ -200,17 +201,32 @@ class CafeteriaApp:
         self.customer.pack(fill="x", pady=(0, 9))
         ttk.Button(right, text="Place Order (Pay at Pickup)", command=self.checkout).pack(fill="x")
 
-        ttk.Label(tracking, text="Enter an order number to check its current status.").pack(anchor="w")
+        ttk.Label(tracking, text="Forgot your pickup number? Enter your Student ID to view all your orders.").pack(anchor="w")
         searchbar = ttk.Frame(tracking)
         searchbar.pack(fill="x", pady=12)
-        self.order_number = tk.StringVar()
-        ttk.Entry(searchbar, textvariable=self.order_number, width=26).pack(side="left")
-        ttk.Label(searchbar, text="Student ID").pack(side="left", padx=(10, 4))
+        ttk.Label(searchbar, text="Student ID").pack(side="left", padx=(0, 5))
         self.track_student_id = tk.StringVar()
-        ttk.Entry(searchbar, textvariable=self.track_student_id, width=18).pack(side="left")
-        ttk.Button(searchbar, text="Check Status", command=self.check_status).pack(side="left", padx=8)
-        self.tracking_output = tk.Text(tracking, height=10, state="disabled", wrap="word")
+        ttk.Entry(searchbar, textvariable=self.track_student_id, width=24).pack(side="left")
+        ttk.Button(searchbar, text="Find My Orders", command=self.find_student_orders).pack(side="left", padx=8)
+        ttk.Label(tracking, text="Optional: enter a known order number to check only that order.").pack(anchor="w")
+        exactbar = ttk.Frame(tracking)
+        exactbar.pack(fill="x", pady=(5, 12))
+        ttk.Label(exactbar, text="Order number").pack(side="left", padx=(0, 5))
+        self.order_number = tk.StringVar()
+        ttk.Entry(exactbar, textvariable=self.order_number, width=24).pack(side="left")
+        ttk.Button(exactbar, text="Check Order Number", command=self.check_status).pack(side="left", padx=8)
+        ttk.Label(tracking, text="Your orders (select an order to view its items)").pack(anchor="w")
+        self.student_orders = ttk.Treeview(tracking, columns=("placed", "status", "total", "payment"), show="tree headings", height=6, selectmode="browse")
+        self.student_orders.heading("#0", text="Order number")
+        self.student_orders.column("#0", width=130, stretch=False)
+        for key, label, width in (("placed", "Placed At", 160), ("status", "Status", 150), ("total", "Total", 100), ("payment", "Payment", 100)):
+            self.student_orders.heading(key, text=label)
+            self.student_orders.column(key, width=width)
+        self.student_orders.pack(fill="both", expand=True, pady=(3, 9))
+        self.student_orders.bind("<<TreeviewSelect>>", self.show_selected_student_order)
+        self.tracking_output = tk.Text(tracking, height=8, state="disabled", wrap="word")
         self.tracking_output.pack(fill="both", expand=True)
+        self.tracked_orders = {}
         self.refresh_student()
 
     def refresh_student(self):
@@ -294,12 +310,7 @@ class CafeteriaApp:
         self.refresh_student()
         messagebox.showinfo("Order Confirmed", f"Your pickup number is {order_id}.\nPay upon pickup at the cafeteria counter.", parent=self.root)
 
-    def check_status(self):
-        try:
-            order = self.engine.get_order(self.order_number.get(), self.track_student_id.get())
-        except CafeteriaError as exc:
-            self.error(exc)
-            return
+    def display_student_order_details(self, order):
         text = (f"Order: {order['order_id']}\nStudent ID: {order.get('student_id', order.get('customer', 'Unknown'))}\n"
                 f"Status: {order['status']}\nPayment: {order['payment_status']}\n"
                 f"Total: {money(order['total_cents'])}\n\nItems:\n")
@@ -309,6 +320,43 @@ class CafeteriaApp:
         self.tracking_output.delete("1.0", "end")
         self.tracking_output.insert("1.0", text)
         self.tracking_output.configure(state="disabled")
+
+    def show_selected_student_order(self, _event=None):
+        selected = self.student_orders.selection()
+        if selected and selected[0] in self.tracked_orders:
+            self.order_number.set(selected[0])
+            self.display_student_order_details(self.tracked_orders[selected[0]])
+
+    def find_student_orders(self):
+        try:
+            orders = self.engine.find_orders_by_student(self.track_student_id.get())
+        except CafeteriaError as exc:
+            self.error(exc)
+            return
+        self.tracked_orders = {order["order_id"]: order for order in orders}
+        for row in self.student_orders.get_children():
+            self.student_orders.delete(row)
+        for order in orders:
+            self.student_orders.insert("", "end", iid=order["order_id"], text=order["order_id"],
+                                       values=(order["created_at"], order["status"],
+                                               money(order["total_cents"]), order["payment_status"]))
+        if orders:
+            self.student_orders.selection_set(orders[0]["order_id"])
+            self.show_selected_student_order()
+        else:
+            self.order_number.set("")
+            self.tracking_output.configure(state="normal")
+            self.tracking_output.delete("1.0", "end")
+            self.tracking_output.insert("1.0", "No orders found for this Student ID.")
+            self.tracking_output.configure(state="disabled")
+
+    def check_status(self):
+        try:
+            order = self.engine.get_order(self.order_number.get(), self.track_student_id.get())
+        except CafeteriaError as exc:
+            self.error(exc)
+            return
+        self.display_student_order_details(order)
 
     def build_staff(self):
         self.clear()
